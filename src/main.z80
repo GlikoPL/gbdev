@@ -1,0 +1,230 @@
+INCLUDE "hardware.inc"
+
+;Rst 0 - Indirect Jump to addr pointed by bc
+SECTION "Rst 0", rom0[$0]
+  ld a, [bc]
+  ld l, a
+  inc bc
+  ld a, [bc]
+  ld h, a
+  jp hl
+  ret
+SECTION "Rst 8", rom0[$8]
+  ret
+SECTION "Rst 10", rom0[$10]
+  ret
+SECTION "Rst 18", rom0[$18]
+  ret
+SECTION "Rst 20", rom0[$20]
+  ret
+SECTION "Rst 28", rom0[$28]
+  ret
+SECTION "Rst 30", rom0[$30]
+  ret
+SECTION "Rst 38", rom0[$38]
+  ret
+
+SECTION "VBlankHandler", rom0[$40]
+  jp VBlankInt
+section "StatHandler", rom0[$48]
+  jp wStatIntHandler
+section "TimerHandler", rom0[$50]
+  reti
+section "SerialHandler", rom0[$58]
+  reti
+section "JoypadHandler", rom0[$60]
+  reti
+SECTION "Header", rom0[$100]
+  jp EntryPoint
+  ds $150 - @, 0
+EntryPoint:
+  ; Disable audio and zero global variables
+  ld a, 0
+  ld [rNR52], a
+  ld [wCurKeys], a
+  ld [wNewKeys], a
+  ld [wFrameCounter], a
+  ld [wCameraX], a
+  call CopyDMAFunction
+  ld hl, wShadowOAM
+  ld b, 160
+  call Memzero8
+  
+  ; Setup dummy interrupt handlers (reti)
+  ld a, $D9
+  ld [wStatIntHandler], a
+
+  call Title_Init
+
+MainLoop:
+  ei
+  halt
+  ld a, [wVsyncFlag]
+  or a, a
+  jr z, MainLoop
+  xor a, a
+  ld [wVsyncFlag], a
+  call UpdateKeys
+
+  ld bc, wUpdateFunction
+  rst 0
+
+  jr MainLoop
+
+; Waits for VBlank and disabled LCD
+VBlankWait:
+  ld a, IEF_VBLANK
+  ld [rIE], a
+  ei
+  halt
+  xor a, a
+  ld [rLCDC], a
+  ret
+
+VBlankInt:
+  push af
+  ld a, HIGH(wShadowOAM)
+  call hOAMDMA
+  ld a, [wFrameCounter]
+  inc a
+  ld [wFrameCounter], a
+  ld a, 1
+  ld [wVsyncFlag], a
+  pop af
+  reti
+
+UpdateKeys:
+  ld a, P1F_GET_BTN
+  call .onenibble
+  ld b, a
+  ld a, P1F_GET_DPAD
+  call .onenibble
+  swap a
+  xor a, b
+  ld b, a
+  ld a, P1F_GET_NONE
+  ldh [rP1], a
+
+  ld a, [wCurKeys]
+  xor a, b
+  and a, b
+  ld [wNewKeys], a
+  ld a, b
+  ld [wCurKeys], a
+  ret
+
+.onenibble
+  ldh [rP1], a
+  call .knownret
+  ldh a, [rP1]
+  ldh a, [rP1]
+  ldh a, [rP1]
+  or a, $F0
+.knownret
+  ret
+
+; hl - addr
+; b - size
+Memzero8:
+  ld a, 0
+.loop:
+  ld [hl+], a
+  dec b
+  jr nz, .loop
+  ret
+
+; de - src
+; hl - dst
+; bc - size
+Memcpy:
+  ld a, [de]
+	ld [hli], a
+	inc de
+	dec bc
+	ld a, b
+	or a, c
+	jp nz, Memcpy
+  ret
+
+; hl - source
+; bc - destination
+Decompress:
+  ld a, [hl+]
+  bit 7, a
+  res 7, a
+  jr nz, .match
+.literal:
+  or a, a
+  ret z
+  ld d, a
+.literal_loop:
+  ld a, [hl+]
+  ld [bc], a
+  inc bc
+  dec d
+  jr nz, .literal_loop
+  jp Decompress
+.match:
+  ld d, a
+  ld a, [hl+]
+  push hl
+  ; Calculate offset
+  ld hl, 0
+  add hl, bc 
+  add a, l
+  ld l, a
+  adc a, h
+  sub l
+  dec a
+  ld h, a
+.match_loop:
+  ld a, [hl+]
+  ld [bc], a
+  inc bc
+  dec d
+  jr nz, .match_loop
+  pop hl
+  jp Decompress
+
+SECTION "GlobalVars", wram0
+wCurKeys: db
+wNewKeys: db
+wFrameCounter: db
+wVsyncFlag: db
+wUpdateFunction: dw
+
+SECTION "hGlobalVars", hram
+wCameraX: db
+
+SECTION "Shadow OAM", wram0,ALIGN[8]
+wShadowOAM:
+  ds 4 * 40
+
+SECTION "OAM DMA function", rom0
+CopyDMAFunction:
+  ld hl, DMAFunction
+  ld b, DMAFunctionEnd - DMAFunction
+  ld c, low(hOAMDMA)
+.copy
+  ld a, [hli]
+  ldh [c], a
+  inc c
+  dec b
+  jr nz, .copy
+  ret
+DMAFunction:
+  ldh [rDMA], a
+  ld a, 40
+.wait
+  dec a
+  jr nz, .wait
+  ret
+DMAFunctionEnd:
+
+section "OAM DMA", HRAM
+hOAMDMA:
+  ds DMAFunctionEnd - DMAFunction
+
+SECTION "Stat Int Handler", wram0
+wStatIntHandler:
+  ds 128

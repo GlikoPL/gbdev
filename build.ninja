@@ -1,0 +1,18 @@
+rule cc
+  command = rgbasm -E -L -Isrc -Iassets -o $out $in
+rule link
+  command = rgblink -m $out.map -n $out.sym -o $out.gb -w $in
+rule fix
+  command = rgbfix -v -p 0xFF -j -m 0x1B -r 0x03 $in.gb
+rule gfx
+  command = rgbgfx -u -o $out -t $out.tilemap $in
+rule compress
+  command = py compress.py -i $in -o $out
+
+build obj/main.o: cc src/main.z80
+build obj/title.o: cc src/title.z80
+build bin/game: link obj/main.o obj/title.o
+build bin/game.gb: fix bin/game
+build assets/gb/title.2bp: gfx assets/raw/title.png
+build assets/gb/title.2bp.comp: compress assets/gb/title.2bp
+build assets/gb/title.2bp.tilemap.comp: compress assets/gb/title.2bp.tilemap

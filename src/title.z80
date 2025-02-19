@@ -1,0 +1,69 @@
+INCLUDE "hardware.inc"
+
+section "Title Screen Code", rom0
+Title_Init:
+  ; Wait for VBlank
+  call VBlankWait
+
+  ; Copy Tiles and Tilemap
+  ld hl, Title_Tiles
+  ld bc, $9000
+  call Decompress
+
+  ld hl, Title_Tilemap
+  ld bc, $9800
+  call Decompress
+
+  ; Enable LCD and set pallete 
+  ld a, LCDCF_ON | LCDCF_BGON
+	ldh [rLCDC], a
+  halt
+  ld a, %11100100
+	ldh [rBGP], a
+
+  ; Setup STAT interrupt
+  ld de, Title_StatInt
+  ld hl, wStatIntHandler
+  ld bc, Title_StatIntEnd - Title_StatInt
+  call Memcpy
+
+  ld a, IEF_VBLANK | IEF_STAT
+  ldh [rIE], a
+  ld a, STATF_LYC
+  ldh [rSTAT], a
+  ld a, 32
+  ldh [rLYC], a
+
+  ; Set update function
+  ld a, low(Title_Loop)
+  ld b, high(Title_Loop)
+  ld hl, wUpdateFunction
+  ld [hl+], a
+  ld [hl], b
+  ret
+
+Title_Loop:
+  xor a
+  ld [rSCX], a
+  ld hl, wFrameCounter
+  ld a, $3
+  cp a, [hl]
+  ret nz
+  ld [hl], 0
+  ld hl, wCameraX
+  inc [hl]
+  ret
+
+Title_StatInt:
+  push af
+  ldh a, [wCameraX]
+  ldh [rSCX], a
+  pop af
+  reti
+Title_StatIntEnd:
+
+section "Title Screen Data", ROMX,BANK[1]
+Title_Tiles:
+  incbin "gb/title.2bp.comp"
+Title_Tilemap:
+  incbin "gb/title.2bp.tilemap.comp"
