@@ -5,21 +5,18 @@ Title_Init:
   ; Wait for VBlank
   call VBlankWait
 
-  ; Copy Tiles and Tilemap
-  ld hl, Title_Tiles
-  ld bc, $9000
-  call Decompress
-
-  ld hl, Title_Tilemap
+  ; Copy Tilemap
+  ld hl, Title_Text
   ld bc, $9800
   call Decompress
 
   ; Enable LCD and set pallete 
-  ld a, LCDCF_ON | LCDCF_BGON
+  ld a, LCDCF_ON | LCDCF_BGON | LCDCF_OBJON
 	ldh [rLCDC], a
   halt
   ld a, %11100100
 	ldh [rBGP], a
+  ldh [rOBP0], a
 
   ; Setup STAT interrupt
   ld de, Title_StatInt
@@ -61,9 +58,3 @@ Title_StatInt:
   pop af
   reti
 Title_StatIntEnd:
-
-section "Title Screen Data", ROMX,BANK[1]
-Title_Tiles:
-  incbin "gb/title.2bp.comp"
-Title_Tilemap:
-  incbin "gb/title.2bp.tilemap.comp"

@@ -1,0 +1,5 @@
+section "Title Screen Data", ROMX,BANK[1]
+Tiles_Gui:
+  incbin "comp/tiles_gui"
+Title_Text:
+  incbin "comp/title_text"

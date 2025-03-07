@@ -54,8 +54,12 @@ EntryPoint:
   ld a, $D9
   ld [wStatIntHandler], a
 
-  call Title_Init
+  ; Copy Gui Tiles (Block 2)
+  ld hl, Tiles_Gui
+  ld bc, $9000
+  call Decompress
 
+  call Title_Init
 MainLoop:
   ei
   halt
